@@ -155,7 +155,7 @@ def PC(ExportUnits_file_path, Response_file_path, Participants_file_path, Empl_M
     response_count_dic = {}
     count = 0
     for index, row in ExportUnitsWithPath.iterrows():
-        correctedPath = row['Path'] + '/'
+        correctedPath = str(row['Path']) + '/'
         # calculating the expected count
         expectedCountNR = ParticipantsPathStrNR.count(correctedPath)
         expected_count_NR_dic[row[ManID]] = expectedCountNR
