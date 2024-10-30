@@ -70,7 +70,7 @@ def LB(ExportUnits_file_path, Response_file_path, Participants_file_path, Column
     Participants_InvitedCount = Participants_IDs_Filtered[Participants_Columns].astype(str)
     Participants_Path = Participants_NoNulls[Participants_Columns].astype(str)
 
-############################ Export Units File ################################################################
+############################ Org Hierarchy Units File ################################################################
     exportUnits_IDS = ExportUnitsDf[Units]
 
 # removing blank employee ID participants

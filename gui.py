@@ -72,7 +72,7 @@ hierarchy_menu = OptionMenu(root, option, *hierarchy_options, command=hierarchy_
 hierarchy_menu.grid(row=0, column=2, padx=5, pady=5, sticky=tk.W, columnspan=2)
 
 # File selection
-file_label_data1 = tk.Label(root, text="Export Units File path")
+file_label_data1 = tk.Label(root, text="Org Hierarchy Units File path")
 file_label_data1.grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
 file_entry_data1 = tk.Entry(root, width=30)
 file_entry_data1.grid(row=1, column=2, padx=5, pady=5)
