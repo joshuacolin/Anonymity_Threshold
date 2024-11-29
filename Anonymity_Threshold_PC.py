@@ -5,6 +5,7 @@ import tkinter as tk
 import webbrowser
 from tkinter import filedialog,messagebox, ttk
 import os
+import sys
 
 ########################################## Execute the script ##########################################
 def PC(ExportUnits_file_path, Response_file_path, Participants_file_path, Empl_Man_IDs, anonymity_threshold_value):
@@ -39,9 +40,73 @@ def PC(ExportUnits_file_path, Response_file_path, Participants_file_path, Empl_M
     # processing D&A file
     Responses = pd.read_csv(f'{Response_file_path}', dtype='str')
 
+    ############################ Export Units File ################################################################
+    print('')
+    print("################################################################################################")
+    print("Processing Export Units file...")
+    exportUnits_IDS = ExportUnitsDf[['UnitName', 'UnitID', 'ParentUnitID', ManID]]
+
+# removing blank employee ID participants
+    exportUnits_NoNulls = exportUnits_IDS.dropna(subset=ManID)
+
+# identifying Placeholders from Manager ID column
+    print("Checking for Placeholders in the hierarchy...")
+    Placeholders = exportUnits_NoNulls[exportUnits_NoNulls[ManID].str.contains('NoManager')]
+    if len(Placeholders) > 0:
+        print("Placeholders identified:")
+        print(Placeholders[[ManID]])
+
+        # converting placeholders to list
+        PlaceholdersList = Placeholders[[ManID]].values.tolist()
+
+        # converting EmployeeID from Participant File to list
+        EmployeeIDList = Participants[[EmpID]].values.tolist()
+
+        # checking if the placeholder information is in the Participant file
+        for p in PlaceholdersList:
+            if p in EmployeeIDList:
+                print("Placeholder", p, " exists in Participant file" )
+            else:
+                # obtaining the row that matches the placeholder ID
+                ExportUnitsFiltered = exportUnits_NoNulls.loc[exportUnits_NoNulls[ManID].isin(p)]
+                # obtaining the parent unit id
+                PlaceholderParentUnitID = ExportUnitsFiltered['ParentUnitID'].iloc[0]
+                # converting the parent unit id into a list
+                PlaceholderParentUnitIDList = PlaceholderParentUnitID.split()
+                # looking for that parent unit id into the export units file, if it doesn't exist that placeholder is the top level
+                ExportUnitsFilteredtParentUnit = exportUnits_NoNulls.loc[exportUnits_NoNulls['UnitID'].isin(PlaceholderParentUnitIDList)]
+                # obtaining placeholder information
+                # Name
+                PlaceholderName = ExportUnitsFiltered['UnitName'].iloc[0]
+                # Employee ID
+                PlaceholderEmployeeID = ExportUnitsFiltered[ManID].iloc[0]
+                # Email
+                PlaceholderEmail = ''
+                # Manager ID
+                if (len(ExportUnitsFilteredtParentUnit) > 0):
+                    PlaceholderManagerID = ExportUnitsFilteredtParentUnit[ManID].iloc[0]
+                else:
+                    PlaceholderManagerID = 'nan'
+
+                # adding placeholder information into the participant file
+                new_row = {'First Name': PlaceholderName, 'Last Name': PlaceholderName, 'Email': PlaceholderEmail, 'Respondent': 'false', EmpID: PlaceholderEmployeeID, ManID: PlaceholderManagerID}
+                print(new_row)
+                Participants = pd.concat([Participants, pd.DataFrame([new_row])], ignore_index=True)
+
+                print("Information for Placeholder", p, " added to the Participant file")
+    else: 
+        print("No Placeholders identified")
+
+# setting Manager ID to be strings
+    exportUnits_Final = exportUnits_NoNulls[[ManID]].astype(str)
+
+    print("All good with Export Units file")
+
 
     ############################ Participants File ################################################################
     # checking if column names exist in the Participant File
+    print('')
+    print("################################################################################################")
     print("Processing participant file...")
     if EmpID not in Participants:
         messagebox.showerror("KeyError", "Please check the Employee ID column provided.")
@@ -50,38 +115,55 @@ def PC(ExportUnits_file_path, Response_file_path, Participants_file_path, Empl_M
     if ManID not in Participants:
         messagebox.showerror("KeyError", "Please check the Manager ID column provided.")
         return
+    
+    # removing blank employee ID participants
+    Participants_NoNulls = Participants.dropna(subset=[EmpID])
 
     # obtaining the employee and manager IDs from the Participants file
-    Participants_IDs = Participants[[EmpID, ManID, 'Respondent']]
-    Participants_Metadata = Participants[['First Name', 'Last Name', 'Email', EmpID]]
-
-    # removing blank employee ID participants
-    Participants_NoNulls = Participants_IDs.dropna(subset=[EmpID])
-
-    # replacing '' with 0 for participants without Manager ID
-    #Participants_ManagerID_NotNull = Participants_NoNulls.fillna(0)
+    Participants_IDs = Participants_NoNulls[[EmpID, ManID, 'Respondent']]
+    Participants_Metadata = Participants_NoNulls[['First Name', 'Last Name', 'Email', EmpID]]
 
     # filtering non respondent participants
-    Participants_IDs_Filtered = Participants_NoNulls.loc[Participants_NoNulls['Respondent'] == 'true']
+    Participants_IDs_Filtered = Participants_IDs.loc[Participants_IDs['Respondent'] == 'true']
 
     # setting Employee ID and Manager ID to be strings
     Participants_InvitedCount = Participants_IDs_Filtered[[EmpID, ManID]].astype(str)
     Participants_Path = Participants_NoNulls[[EmpID, ManID]].astype(str)
 
-############################ Export Units File ################################################################
-    print("Processing Export Units file...")
-    exportUnits_IDS = ExportUnitsDf[[ManID]]
+    ################################################################################################################################
+    # checking if all managers are in the participant file
+    print('')
+    print("################################################################################################")
+    print("Checking for missing managers in the participant file")
+    # removing blank managers
+    managersListNoNulls = Participants_Path[ManID].loc[Participants_Path[ManID] != 'nan']
 
-# removing blank employee ID participants
-    exportUnits_NoNulls = exportUnits_IDS.dropna(subset=ManID)
+    # removing duplicates from managers list
+    managersList = managersListNoNulls.drop_duplicates()
 
-# removing "No Manager" rows from Manager ID column
-#    exportUnits_IDs_Final = exportUnits_NoNulls[~exportUnits_NoNulls[ManID].str.contains('NoManager')]
+    # obtaining the list of employees
+    employeesList = Participants_Path[[EmpID]]
 
-# setting Manager ID to be strings
-    exportUnits_Final = exportUnits_NoNulls[[ManID]].astype(str)
+    # joining managers and employees lists
+    ManagerEmployeeMerge = pd.merge(managersList, employeesList, how='left', left_on=ManID, right_on=EmpID)
+
+    # identifying missing managers
+    MissingManagers = ManagerEmployeeMerge.loc[ManagerEmployeeMerge[EmpID].isnull()]
+
+    # if there are missing managers, display an error message
+    if len(MissingManagers) > 0:
+        print("########################################################################################")
+        print("Missing Managers:")
+        print(MissingManagers)
+        messagebox.showerror("Missing Managers", "There are managers missing in the Participants List."+'\nPlease review the console.')
+        # finish the script
+        sys.exit()
+
+    print("All good with Participants file")
 
 ############################ Response File ################################################################
+    print('')
+    print("################################################################################################")
     print("Processing response file...")
 # filtering partial responses or Finished = False, so only Finished = true is included in the subset
     response_Submitted = Responses.loc[(Responses['Finished'] == 'True') | (Responses['Finished'] == '1')]
@@ -100,8 +182,12 @@ def PC(ExportUnits_file_path, Response_file_path, Participants_file_path, Empl_M
 # adding response column
     response_Final['Response'] = 'Yes'
 
+    print("All good with Response file")
+
     ############################ Path generation ################################################################
     # assigning values of Employee ID and Manager ID columns into a list
+    print('')
+    print("################################################################################################")
     print("Creating the hierarchy...")
     hierarchy = Participants_Path[[EmpID, ManID]].values.tolist()
 
@@ -148,6 +234,8 @@ def PC(ExportUnits_file_path, Response_file_path, Participants_file_path, Empl_M
 
     ############################ Calculating the Invited and Response Counts ################################################################
     # calculating the expected count - No Response
+    print('')
+    print("################################################################################################")
     print("Calculating the expected count and response count for direct reports...")
     # filtering participants who didn't respond the survey
     ParticipantsPathNoReponse = ParticipantsWithResponses.loc[ParticipantsWithResponses['Response'] == 'No']
@@ -178,6 +266,8 @@ def PC(ExportUnits_file_path, Response_file_path, Participants_file_path, Empl_M
     ExportUnitsToReduce = ExportUnitsWithPathDirectReports
 
     # creating a while loop to get all invited and response count for each manager
+    print('')
+    print("################################################################################################")
     print("Calculating the response and invited count for all reports...")
     count = 1
     while(len(ExportUnitsToReduce) > 1):
@@ -238,7 +328,10 @@ def PC(ExportUnits_file_path, Response_file_path, Participants_file_path, Empl_M
         print('-----------------------------------------------------------')
         print(count, len(ExportUnitsToReduce))
         count +=1
-        
+
+    print('')
+    print("################################################################################################") 
+    print("Printing Anonymity Report:")  
     print(ExportUnitsWithPathDirectReports.sort_values(ManID))
     
     dfAnonymityThreshold = ExportUnitsWithPathDirectReports
